@@ -8,9 +8,9 @@ const ADMIN_EMAIL = 'ronie@oneclicksolucoes.com.br'
 
 interface Atendente {
   id: string
-  nome: string
   email: string
-  criado_em: string
+  created_at: string
+  user_metadata?: { nome?: string }
 }
 
 export default function AdminPage() {

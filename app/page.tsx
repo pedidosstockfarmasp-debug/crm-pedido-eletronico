@@ -9,15 +9,35 @@ interface Lead { id:string;chamado_id:string;empresa:string;cnpj:string;responsa
 interface Chamado { id:string;lead_id:string;descricao:string;tipo:string;usuario:string;criado_em:string }
 
 const SL:Record<Status,string> = {novo:'Novo',contato:'Em Contato',instalado:'Instalado',pendente:'Pendente'}
+const SC:Record<Status,string> = {
+  novo:'rgba(0,229,255,.15)',
+  contato:'rgba(255,211,77,.15)',
+  instalado:'rgba(0,255,153,.15)',
+  pendente:'rgba(255,59,95,.15)'
+}
+const ST:Record<Status,string> = {
+  novo:'var(--cyan)',
+  contato:'var(--yellow)',
+  instalado:'var(--green)',
+  pendente:'var(--red)'
+}
 
 function waUrl(tel:string,nome:string,empresa:string){
-  const c=(tel||'').replace(/\D/g,'');const n=c.startsWith('55')?c:`55${c}`
+  const c=(tel||'').replace(/\D/g,'')
+  const n=c.startsWith('55')?c:`55${c}`
   return `https://wa.me/${n}?text=${encodeURIComponent(`Olá ${nome}, aqui é a OneClick Soluções! Recebemos a solicitação de instalação do Pedido Eletrônico Stock Farma de ${empresa}. Podemos agendar a instalação?`)}`
 }
-function fDate(d:string){if(!d)return '-';return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
-function fPhone(t:string){if(!t)return '-';const c=t.replace(/\D/g,'');if(c.length===11)return `(${c.slice(0,2)}) ${c.slice(2,7)}-${c.slice(7)}`;if(c.length===10)return `(${c.slice(0,2)}) ${c.slice(2,6)}-${c.slice(6)}`;return t}
-
-const WA=<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.287 7.041L.785 23.216a.5.5 0 0 0 .619.619l4.175-1.502A11.948 11.948 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.82 9.82 0 0 1-5.007-1.371l-.359-.214-3.717 1.337 1.337-3.717-.214-.359A9.82 9.82 0 0 1 2.182 12C2.182 6.56 6.56 2.182 12 2.182c5.44 0 9.818 4.378 9.818 9.818 0 5.44-4.378 9.818-9.818 9.818z"/></svg>
+function fDate(d:string){
+  if(!d)return '-'
+  return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+}
+function fPhone(t:string){
+  if(!t)return '-'
+  const c=t.replace(/\D/g,'')
+  if(c.length===11)return `(${c.slice(0,2)}) ${c.slice(2,7)}-${c.slice(7)}`
+  if(c.length===10)return `(${c.slice(0,2)}) ${c.slice(2,6)}-${c.slice(6)}`
+  return t
+}
 
 export default function CRMPage() {
   const router = useRouter()
@@ -30,6 +50,8 @@ export default function CRMPage() {
   const [selected, setSelected] = useState<Lead|null>(null)
   const [nota, setNota] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(()=>{
     supabase.auth.getUser().then(({data})=>{
@@ -53,7 +75,7 @@ export default function CRMPage() {
         try{
           await fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({empresa:payload.new.empresa,responsavel:payload.new.responsavel,telefone:payload.new.telefone,chamado_id:payload.new.chamado_id})})
-        }catch(e){console.log('notify error',e)}
+        }catch(e){console.log('notify',e)}
       })
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},fetchLeads)
       .subscribe()
@@ -65,7 +87,8 @@ export default function CRMPage() {
     supabase.from('chamados').select('*').eq('lead_id',selected.id).order('criado_em',{ascending:false}).then(({data})=>{if(data)setChamados(data)})
   },[selected])
 
-  async function updateStatus(id:string,status:Status,nomeUser:string){
+  async function updateStatus(id:string,status:Status){
+    const nomeUser=user?.user_metadata?.nome||user?.email||'Atendente'
     await supabase.from('leads').update({status}).eq('id',id)
     await supabase.from('chamados').insert({lead_id:id,descricao:`Status → "${SL[status]}"`,tipo:'sistema',usuario:nomeUser})
     setSelected(p=>p?{...p,status}:null)
@@ -89,233 +112,251 @@ export default function CRMPage() {
 
   const filtered=leads.filter(l=>(filter==='todos'||l.status===filter)&&(!search||l.empresa?.toLowerCase().includes(search.toLowerCase())||l.cnpj?.includes(search)||l.responsavel?.toLowerCase().includes(search.toLowerCase())))
   const counts={total:leads.length,novo:leads.filter(l=>l.status==='novo').length,contato:leads.filter(l=>l.status==='contato').length,instalado:leads.filter(l=>l.status==='instalado').length,pendente:leads.filter(l=>l.status==='pendente').length}
-  const nomeUser=user?.user_metadata?.nome||user?.email||'Atendente'
+  const nomeUser=user?.user_metadata?.nome||user?.email?.split('@')[0]||'Atendente'
   const isAdmin=user?.email==='ronie@oneclicksolucoes.com.br'
 
-  const S={
-    root:{minHeight:'100vh',display:'flex',flexDirection:'column' as const,position:'relative' as const},
-    grid:{position:'fixed' as const,inset:0,opacity:.025,backgroundImage:'linear-gradient(var(--cyan) 1px,transparent 1px),linear-gradient(90deg,var(--cyan) 1px,transparent 1px)',backgroundSize:'40px 40px',pointerEvents:'none' as const},
-    hdr:{display:'flex',alignItems:'center',borderBottom:'1px solid var(--border)',position:'sticky' as const,top:0,zIndex:100,background:'rgba(1,7,18,.97)',backdropFilter:'blur(12px)',minHeight:64,gap:0},
-    hdrOC:{display:'flex',alignItems:'center',padding:'0 16px',borderRight:'1px solid var(--border)',height:64,flexShrink:0},
-    hdrCenter:{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',gap:3,padding:'0 12px'},
-    aiTag:{display:'flex',alignItems:'center',gap:7},
-    aiLabel:{fontSize:13,fontWeight:600,color:'#fff'},
-    aiBadge:{background:'linear-gradient(90deg,rgba(0,229,255,.18),rgba(0,255,153,.12))',border:'1px solid rgba(0,229,255,.3)',color:'var(--cyan)',borderRadius:20,fontSize:9,fontWeight:700,padding:'2px 10px',letterSpacing:'.1em'},
-    emailLine:{fontSize:10,color:'rgba(0,229,255,.5)'},
-    hdrSF:{display:'flex',alignItems:'center',gap:10,padding:'0 14px',borderLeft:'1px solid var(--border)',height:64,flexShrink:0},
-    sfBox:{background:'#fff',borderRadius:8,padding:'3px 10px',height:38,display:'flex',alignItems:'center'},
-    sfInfo:{display:'flex',flexDirection:'column' as const},
-    sfCanal:{fontSize:8,color:'var(--muted)',letterSpacing:'.1em',textTransform:'uppercase' as const},
-    sfPortal:{fontSize:10,color:'rgba(255,255,255,.6)',fontWeight:600},
-    hdrRight:{display:'flex',alignItems:'center',gap:8,padding:'0 14px',borderLeft:'1px solid var(--border)',height:64,flexShrink:0},
-    pulse:{width:7,height:7,borderRadius:'50%',background:'var(--green)',animation:'pulse 2s infinite'},
-    live:{fontSize:9,color:'var(--green)',fontWeight:700,letterSpacing:'.1em'},
-    notif:{background:'rgba(255,59,95,.18)',border:'1px solid rgba(255,59,95,.35)',color:'var(--red)',borderRadius:20,fontSize:10,padding:'3px 10px',fontWeight:700},
-    userArea:{display:'flex',alignItems:'center',gap:8,padding:'0 14px',borderLeft:'1px solid var(--border)',height:64,flexShrink:0},
-    userName:{fontSize:11,color:'var(--muted)'},
-    stats:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,padding:'14px 16px',position:'relative' as const,zIndex:1},
-    sc:{background:'var(--card)',border:'1px solid var(--border)',borderRadius:12,padding:'12px 16px',position:'relative' as const,overflow:'hidden'},
-    scBar:{position:'absolute' as const,top:0,left:0,width:'100%',height:2,borderRadius:'2px 2px 0 0'},
-    scLbl:{fontSize:9,color:'var(--muted)',letterSpacing:'.1em',textTransform:'uppercase' as const,marginBottom:4},
-    scVal:{fontSize:28,fontWeight:700,lineHeight:1},
-    scSub:{fontSize:9,marginTop:3},
-    toolbar:{display:'flex',alignItems:'center',gap:6,padding:'0 16px 12px',position:'relative' as const,zIndex:1,flexWrap:'wrap' as const},
-    tab:{padding:'5px 14px',borderRadius:20,fontSize:11,cursor:'pointer',border:'1px solid transparent',background:'none',color:'var(--muted)',fontFamily:'inherit',transition:'.15s'},
-    tabOn:{background:'rgba(0,229,255,.1)',borderColor:'rgba(0,229,255,.25)',color:'var(--cyan)',fontWeight:600},
-    srch:{background:'rgba(255,255,255,.04)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:8,padding:'6px 14px',fontSize:11,fontFamily:'inherit',width:260,outline:'none'},
-    main:{display:'flex',flex:1,position:'relative' as const,zIndex:1,minHeight:0},
-    tblWrap:{flex:1,overflow:'auto',minWidth:0},
-    loadMsg:{padding:40,textAlign:'center' as const,color:'var(--muted)',fontSize:13},
-    tbl:{width:'100%',borderCollapse:'collapse' as const,fontSize:11},
-    tagPE:{display:'inline-block',background:'rgba(26,93,171,.22)',border:'1px solid rgba(26,93,171,.4)',color:'#6ab0f5',borderRadius:3,fontSize:8,padding:'1px 5px',fontWeight:700,letterSpacing:'.06em',marginRight:4},
-    tagId:{fontSize:11,color:'var(--cyan)',fontWeight:700},
-    coName:{display:'block',fontWeight:600,color:'var(--text)',fontSize:12},
-    coCnpj:{display:'block',fontSize:9,color:'var(--muted)'},
-    wa:{display:'inline-flex',alignItems:'center',gap:4,background:'rgba(0,255,153,.1)',border:'1px solid rgba(0,255,153,.22)',color:'var(--green)',borderRadius:7,padding:'3px 8px',fontSize:10,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap' as const,transition:'.15s'},
-    detBtn:{background:'rgba(0,229,255,.07)',border:'1px solid var(--border)',color:'var(--cyan)',borderRadius:6,padding:'4px 10px',fontSize:9,cursor:'pointer',fontFamily:'inherit',transition:'.15s',whiteSpace:'nowrap' as const},
-    det:{width:300,flexShrink:0,background:'linear-gradient(180deg,#071b30,#030e1a)',borderLeft:'1px solid var(--border)',padding:'18px 16px',overflowY:'auto' as const,display:'flex',flexDirection:'column' as const,gap:10,animation:'slideIn .25s ease'},
-    detHdr:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8},
-    detCo:{fontSize:14,fontWeight:700,color:'var(--cyan)',lineHeight:1.3},
-    detCnpj:{fontSize:10,color:'var(--muted)',marginTop:2},
-    div:{height:1,background:'var(--border)',flexShrink:0},
-    sec:{fontSize:9,fontWeight:700,color:'var(--cyan)',letterSpacing:'.1em',textTransform:'uppercase' as const},
-    row:{display:'flex',flexDirection:'column' as const,gap:2},
-    lbl:{fontSize:8,color:'var(--muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'},
-    val:{fontSize:11,color:'var(--text)',lineHeight:1.4},
-    valCyan:{fontSize:14,color:'var(--cyan)',fontWeight:700},
-    sel:{background:'rgba(0,0,0,.4)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:7,padding:'6px 10px',fontSize:11,fontFamily:'inherit',width:'100%',cursor:'pointer',outline:'none'},
-    waFull:{display:'flex',alignItems:'center',justifyContent:'center',gap:6,background:'rgba(0,255,153,.1)',border:'1px solid rgba(0,255,153,.25)',color:'var(--green)',borderRadius:8,padding:8,fontSize:12,fontWeight:700,textDecoration:'none',transition:'.15s'},
-    notaInp:{background:'rgba(0,0,0,.3)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:8,padding:'8px 10px',fontSize:11,fontFamily:'inherit',width:'100%',resize:'none' as const,outline:'none',lineHeight:1.5},
-    notaBtn:{background:'rgba(0,229,255,.1)',border:'1px solid rgba(0,229,255,.25)',color:'var(--cyan)',borderRadius:8,padding:7,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',width:'100%'},
-    tl:{display:'flex',flexDirection:'column' as const,gap:8},
-    tlItem:{display:'flex',gap:8,alignItems:'flex-start'},
-    tlDot:{width:7,height:7,borderRadius:'50%',flexShrink:0,marginTop:3},
-    tlCo:{display:'flex',flexDirection:'column' as const,gap:2},
-    tlTxt:{fontSize:11,color:'var(--text)',lineHeight:1.4},
-    tlDate:{fontSize:9,color:'var(--muted)'},
-    tlUser:{fontSize:9,color:'rgba(0,229,255,.5)'},
-    foot:{display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:'9px 16px',borderTop:'1px solid var(--border)',background:'rgba(0,0,0,.2)',position:'relative' as const,zIndex:1,flexWrap:'wrap' as const},
-    closeBtn:{background:'none',border:'1px solid var(--border)',color:'var(--muted)',width:26,height:26,borderRadius:6,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit',flexShrink:0},
-  }
-
-  const badgeStyle=(st:Status)=>{
-    const map={novo:{bg:'rgba(0,229,255,.1)',color:'var(--cyan)',border:'1px solid rgba(0,229,255,.22)'},contato:{bg:'rgba(255,211,77,.1)',color:'var(--yellow)',border:'1px solid rgba(255,211,77,.22)'},instalado:{bg:'rgba(0,255,153,.1)',color:'var(--green)',border:'1px solid rgba(0,255,153,.22)'},pendente:{bg:'rgba(255,59,95,.1)',color:'var(--red)',border:'1px solid rgba(255,59,95,.22)'}}
-    return{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:20,fontSize:9,fontWeight:700,...{background:map[st].bg,color:map[st].color,border:map[st].border}}
-  }
-
-  const statColors=['var(--cyan)','var(--yellow)','var(--green)','var(--red)']
-  const statData=[{l:'Total de Leads',v:counts.total,s:'todos os registros'},{l:'Em Contato',v:counts.contato,s:'aguardando retorno'},{l:'Instalados',v:counts.instalado,s:'sistema em produção'},{l:'Pendentes',v:counts.pendente,s:'sem resposta'}]
-
-  if(!user)return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'var(--cyan)',fontSize:13}}>Verificando acesso...</span></div>
+  if(!user)return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{width:32,height:32,border:'3px solid rgba(0,229,255,.2)',borderTop:'3px solid var(--cyan)',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
+    </div>
+  )
 
   return (
-    <div style={S.root}>
-      <div style={S.grid}/>
-      <header style={S.hdr}>
-        <div style={S.hdrOC}>
-          <Image src="/logo-oneclick.png" alt="OneClick Soluções" width={150} height={48} style={{objectFit:'contain'}}/>
-        </div>
-        <div style={S.hdrCenter}>
-          <div style={S.aiTag}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            <span style={S.aiLabel}><em style={{color:'var(--cyan)',fontStyle:'normal'}}>IA</em> lendo e processando emails em tempo real</span>
-            <span style={S.aiBadge}>⚡ AUTO</span>
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',position:'relative'}}>
+      {/* Grid bg */}
+      <div style={{position:'fixed',inset:0,opacity:.03,backgroundImage:'linear-gradient(var(--cyan) 1px,transparent 1px),linear-gradient(90deg,var(--cyan) 1px,transparent 1px)',backgroundSize:'36px 36px',pointerEvents:'none',zIndex:0}}/>
+
+      {/* HEADER MOBILE */}
+      <header style={{position:'sticky',top:0,zIndex:100,background:'rgba(2,13,31,.97)',backdropFilter:'blur(16px)',borderBottom:'1px solid var(--border)'}}>
+        {/* Top bar */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px'}}>
+          <Image src="/logo-oneclick.png" alt="OneClick" width={110} height={34} style={{objectFit:'contain',flexShrink:0}}/>
+          <div style={{flex:1}}/>
+          {/* Live indicator */}
+          <div style={{display:'flex',alignItems:'center',gap:5,background:'rgba(0,255,153,.1)',border:'1px solid rgba(0,255,153,.2)',borderRadius:20,padding:'4px 10px',flexShrink:0}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:'var(--green)',animation:'pulse 2s infinite'}}/>
+            <span style={{fontSize:10,color:'var(--green)',fontWeight:700,letterSpacing:'.06em'}}>AO VIVO</span>
           </div>
-          <div style={S.emailLine}>pedidosstockfarmasp@gmail.com</div>
-        </div>
-        <div style={S.hdrSF}>
-          <div style={S.sfBox}>
-            <Image src="/logo-stockfarma.png" alt="Stock Farma" width={110} height={34} style={{objectFit:'contain'}}/>
-          </div>
-          <div style={S.sfInfo}>
-            <span style={S.sfCanal}>canal parceiro</span>
-            <span style={S.sfPortal}>Portal de Instalações</span>
-          </div>
-        </div>
-        <div style={S.hdrRight}>
-          <div style={S.pulse}/>
-          <span style={S.live}>AO VIVO</span>
-          <span style={S.notif}>{counts.novo} novo{counts.novo!==1?'s':''}</span>
-        </div>
-        <div style={S.userArea}>
-          <div style={{width:28,height:28,borderRadius:'50%',background:'rgba(0,229,255,.1)',border:'1px solid rgba(0,229,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'var(--cyan)',flexShrink:0}}>
+          {/* Novos badge */}
+          {counts.novo>0&&<div style={{background:'var(--red)',color:'#fff',borderRadius:20,fontSize:10,padding:'3px 8px',fontWeight:700,flexShrink:0}}>{counts.novo} novo{counts.novo!==1?'s':''}</div>}
+          {/* Search toggle */}
+          <button onClick={()=>setShowSearch(p=>!p)} style={{background:'none',border:'none',color:'var(--cyan)',fontSize:20,cursor:'pointer',padding:4,flexShrink:0}}>
+            🔍
+          </button>
+          {/* Menu */}
+          <button onClick={()=>setMenuOpen(p=>!p)} style={{background:'rgba(0,229,255,.08)',border:'1px solid var(--border)',color:'var(--cyan)',borderRadius:8,padding:'6px 10px',fontSize:11,fontWeight:700,cursor:'pointer',flexShrink:0}}>
             {nomeUser.charAt(0).toUpperCase()}
+          </button>
+        </div>
+
+        {/* Stock Farma + AI tag */}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 10px',borderTop:'1px solid rgba(0,229,255,.08)'}}>
+          <div style={{background:'#fff',borderRadius:6,padding:'2px 8px',height:28,display:'flex',alignItems:'center',flexShrink:0}}>
+            <Image src="/logo-stockfarma.png" alt="Stock Farma" width={80} height={22} style={{objectFit:'contain'}}/>
           </div>
-          <div style={{display:'flex',flexDirection:'column'}}>
-            <span style={{fontSize:11,color:'var(--text)',fontWeight:600,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomeUser}</span>
-            {isAdmin&&<a href="/admin" style={{fontSize:9,color:'var(--cyan)',textDecoration:'none',letterSpacing:'.05em'}}>⚙ Admin</a>}
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:10,color:'var(--cyan)',fontWeight:700}}>⚡ IA</span>
+            <span style={{fontSize:10,color:'var(--muted)'}}>lendo emails em tempo real</span>
+            <span style={{background:'rgba(0,229,255,.12)',border:'1px solid rgba(0,229,255,.25)',color:'var(--cyan)',borderRadius:10,fontSize:8,padding:'1px 6px',fontWeight:700,letterSpacing:'.06em',flexShrink:0}}>AUTO</span>
           </div>
-          <button onClick={logout} style={{background:'rgba(255,59,95,.08)',border:'1px solid rgba(255,59,95,.2)',color:'var(--red)',borderRadius:6,padding:'4px 8px',fontSize:9,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>Sair</button>
+        </div>
+
+        {/* Search bar */}
+        {showSearch&&(
+          <div style={{padding:'0 14px 10px'}}>
+            <input
+              autoFocus
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              placeholder="Buscar empresa, CNPJ, responsável..."
+              style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid rgba(0,229,255,.3)',color:'var(--text)',borderRadius:10,padding:'10px 14px',fontSize:13,fontFamily:'inherit',outline:'none'}}
+            />
+          </div>
+        )}
+
+        {/* Filter tabs */}
+        <div style={{display:'flex',gap:6,padding:'0 14px 10px',overflowX:'auto',scrollbarWidth:'none'}}>
+          {[
+            {k:'todos',l:'Todos',n:counts.total},
+            {k:'novo',l:'Novos',n:counts.novo},
+            {k:'contato',l:'Contato',n:counts.contato},
+            {k:'instalado',l:'Instalados',n:counts.instalado},
+            {k:'pendente',l:'Pendentes',n:counts.pendente},
+          ].map(f=>(
+            <button key={f.k} onClick={()=>setFilter(f.k)}
+              style={{flexShrink:0,padding:'6px 12px',borderRadius:20,fontSize:11,fontWeight:filter===f.k?700:400,cursor:'pointer',fontFamily:'inherit',transition:'.15s',border:filter===f.k?'1px solid rgba(0,229,255,.4)':'1px solid rgba(255,255,255,.08)',background:filter===f.k?'rgba(0,229,255,.15)':'rgba(255,255,255,.04)',color:filter===f.k?'var(--cyan)':'var(--muted)',whiteSpace:'nowrap'}}>
+              {f.l} {f.n>0&&<span style={{fontSize:9,opacity:.8}}>({f.n})</span>}
+            </button>
+          ))}
         </div>
       </header>
 
-      <div style={S.stats}>
-        {statData.map((s,i)=>(
-          <div key={s.l} style={S.sc}>
-            <div style={{...S.scBar,background:statColors[i]}}/>
-            <div style={S.scLbl}>{s.l}</div>
-            <div style={{...S.scVal,color:statColors[i]}}>{s.v}</div>
-            <div style={{...S.scSub,color:statColors[i].replace(')',', .45)')}}>{s.s}</div>
+      {/* DROPDOWN MENU */}
+      {menuOpen&&(
+        <div style={{position:'fixed',top:64,right:14,zIndex:200,background:'#061628',border:'1px solid var(--border)',borderRadius:12,padding:8,minWidth:180,boxShadow:'0 8px 32px rgba(0,0,0,.5)'}}>
+          <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--text)'}}>{nomeUser}</div>
+            <div style={{fontSize:10,color:'var(--muted)'}}>{user?.email}</div>
+          </div>
+          {isAdmin&&(
+            <button onClick={()=>{router.push('/admin');setMenuOpen(false)}}
+              style={{width:'100%',background:'none',border:'none',color:'var(--cyan)',fontSize:12,padding:'8px 12px',textAlign:'left',cursor:'pointer',fontFamily:'inherit',borderRadius:8}}>
+              ⚙️ Gerenciar Atendentes
+            </button>
+          )}
+          <button onClick={()=>{logout();setMenuOpen(false)}}
+            style={{width:'100%',background:'none',border:'none',color:'var(--red)',fontSize:12,padding:'8px 12px',textAlign:'left',cursor:'pointer',fontFamily:'inherit',borderRadius:8}}>
+            🚪 Sair
+          </button>
+        </div>
+      )}
+      {menuOpen&&<div onClick={()=>setMenuOpen(false)} style={{position:'fixed',inset:0,zIndex:190}}/>}
+
+      {/* STATS MINI */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,padding:'12px 14px',position:'relative',zIndex:1}}>
+        {[
+          {l:'Total',v:counts.total,c:'var(--cyan)'},
+          {l:'Contato',v:counts.contato,c:'var(--yellow)'},
+          {l:'Instalado',v:counts.instalado,c:'var(--green)'},
+          {l:'Pendente',v:counts.pendente,c:'var(--red)'},
+        ].map(s=>(
+          <div key={s.l} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 8px',textAlign:'center',position:'relative',overflow:'hidden'}}>
+            <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:s.c,borderRadius:'2px 2px 0 0'}}/>
+            <div style={{fontSize:22,fontWeight:700,color:s.c,lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:9,color:'var(--muted)',marginTop:3,letterSpacing:'.04em',textTransform:'uppercase'}}>{s.l}</div>
           </div>
         ))}
       </div>
 
-      <div style={S.toolbar}>
-        {['todos','novo','contato','instalado','pendente'].map(f=>(
-          <button key={f} style={{...S.tab,...(filter===f?S.tabOn:{})}} onClick={()=>setFilter(f)}>
-            {f==='todos'?'Todos':SL[f as Status]}
-          </button>
+      {/* LEADS LIST — CARDS */}
+      <div style={{flex:1,padding:'0 14px 20px',position:'relative',zIndex:1,display:'flex',flexDirection:'column',gap:10}}>
+        {loading?(
+          <div style={{padding:40,textAlign:'center'}}>
+            <div style={{width:32,height:32,border:'3px solid rgba(0,229,255,.2)',borderTop:'3px solid var(--cyan)',borderRadius:'50%',animation:'spin .8s linear infinite',margin:'0 auto 12px'}}/>
+            <span style={{fontSize:13,color:'var(--muted)'}}>Carregando leads...</span>
+          </div>
+        ):filtered.length===0?(
+          <div style={{padding:40,textAlign:'center',color:'var(--muted)',fontSize:13}}>Nenhum lead encontrado.</div>
+        ):filtered.map((l,i)=>(
+          <div key={l.id}
+            onClick={()=>setSelected(l)}
+            style={{background:'var(--card)',border:`1px solid ${selected?.id===l.id?'rgba(0,229,255,.4)':'var(--border)'}`,borderLeft:`3px solid ${ST[l.status]}`,borderRadius:12,padding:'14px',cursor:'pointer',transition:'.15s',animation:`fadeUp .3s ease ${i*0.04}s both`}}>
+            {/* Top row */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{background:'rgba(26,93,171,.2)',border:'1px solid rgba(26,93,171,.35)',color:'#6ab0f5',borderRadius:4,fontSize:8,padding:'2px 5px',fontWeight:700,letterSpacing:'.05em',flexShrink:0}}>PE</span>
+              <span style={{fontSize:12,color:'var(--cyan)',fontWeight:700,flexShrink:0}}>{l.chamado_id||l.id.slice(0,8)}</span>
+              <div style={{flex:1}}/>
+              <span style={{background:SC[l.status],color:ST[l.status],border:`1px solid ${ST[l.status]}33`,borderRadius:20,fontSize:9,padding:'3px 9px',fontWeight:700,flexShrink:0}}>
+                {SL[l.status]}
+              </span>
+            </div>
+            {/* Company */}
+            <div style={{fontSize:14,fontWeight:700,color:'var(--text)',marginBottom:2,lineHeight:1.3}}>{l.empresa}</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:10}}>{l.cnpj}</div>
+            {/* Bottom row */}
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:'var(--muted)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.responsavel}</span>
+              <span style={{fontSize:10,color:'var(--muted)',flexShrink:0}}>{fDate(l.criado_em)}</span>
+              <a href={waUrl(l.telefone,l.responsavel,l.empresa)} target="_blank" rel="noreferrer"
+                onClick={e=>e.stopPropagation()}
+                style={{display:'flex',alignItems:'center',gap:4,background:'rgba(0,255,153,.12)',border:'1px solid rgba(0,255,153,.25)',color:'var(--green)',borderRadius:8,padding:'5px 10px',fontSize:11,fontWeight:700,textDecoration:'none',flexShrink:0}}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.287 7.041L.785 23.216a.5.5 0 0 0 .619.619l4.175-1.502A11.948 11.948 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.82 9.82 0 0 1-5.007-1.371l-.359-.214-3.717 1.337 1.337-3.717-.214-.359A9.82 9.82 0 0 1 2.182 12C2.182 6.56 6.56 2.182 12 2.182c5.44 0 9.818 4.378 9.818 9.818 0 5.44-4.378 9.818-9.818 9.818z"/></svg>
+                WA
+              </a>
+            </div>
+          </div>
         ))}
-        <div style={{flex:1}}/>
-        <input style={S.srch} placeholder="Buscar empresa, CNPJ, responsável..." value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
 
-      <div style={S.main}>
-        <div style={S.tblWrap}>
-          {loading?<div style={S.loadMsg}>Carregando leads...</div>:filtered.length===0?<div style={S.loadMsg}>Nenhum lead encontrado.</div>:(
-            <table style={S.tbl}>
-              <thead>
-                <tr>{['Chamado','Empresa','Responsável','WhatsApp','Recebido','Status','Ação'].map(h=>(
-                  <th key={h} style={{padding:'8px 12px',textAlign:'left',color:'var(--muted)',fontSize:9,letterSpacing:'.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',background:'rgba(0,0,0,.25)',fontWeight:500,whiteSpace:'nowrap',position:'sticky',top:0}}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {filtered.map(l=>(
-                  <tr key={l.id} onClick={()=>setSelected(l)} style={{borderBottom:'1px solid rgba(255,255,255,.025)',cursor:'pointer',background:selected?.id===l.id?'rgba(0,229,255,.08)':'transparent',transition:'background .12s'}}>
-                    <td style={{padding:'9px 12px'}}><span style={S.tagPE}>PE</span><span style={S.tagId}>{l.chamado_id||l.id.slice(0,8)}</span></td>
-                    <td style={{padding:'9px 12px',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={S.coName}>{l.empresa}</span><span style={S.coCnpj}>{l.cnpj}</span></td>
-                    <td style={{padding:'9px 12px',fontSize:11,maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.responsavel}</td>
-                    <td style={{padding:'9px 12px'}}>
-                      <a style={S.wa} href={waUrl(l.telefone,l.responsavel,l.empresa)} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}>{WA}{fPhone(l.telefone)}</a>
-                    </td>
-                    <td style={{padding:'9px 12px',fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>{fDate(l.criado_em)}</td>
-                    <td style={{padding:'9px 12px'}}><span style={badgeStyle(l.status)}>{SL[l.status]}</span></td>
-                    <td style={{padding:'9px 12px'}}><button style={S.detBtn} onClick={e=>{e.stopPropagation();setSelected(l)}}>Detalhes</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {selected&&(
-          <div style={S.det}>
-            <div style={S.detHdr}>
-              <div>
-                <div style={S.detCo}>{selected.empresa}</div>
-                <div style={S.detCnpj}>{selected.cnpj}</div>
-                <span style={{...badgeStyle(selected.status),marginTop:6,display:'inline-flex'}}>{SL[selected.status]}</span>
-              </div>
-              <button style={S.closeBtn} onClick={()=>setSelected(null)}>✕</button>
+      {/* DETAIL PANEL — FULL SCREEN MOBILE */}
+      {selected&&(
+        <div style={{position:'fixed',inset:0,zIndex:300,background:'linear-gradient(180deg,#071b30,#020d1f)',overflowY:'auto',animation:'slideRight .25s ease'}}>
+          {/* Detail header */}
+          <div style={{position:'sticky',top:0,background:'rgba(7,27,48,.97)',backdropFilter:'blur(12px)',borderBottom:'1px solid var(--border)',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,zIndex:10}}>
+            <button onClick={()=>setSelected(null)} style={{background:'rgba(0,229,255,.08)',border:'1px solid var(--border)',color:'var(--cyan)',borderRadius:8,padding:'6px 12px',fontSize:13,cursor:'pointer',fontFamily:'inherit',fontWeight:700}}>← Voltar</button>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--cyan)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected.empresa}</div>
+              <div style={{fontSize:10,color:'var(--muted)'}}>{selected.chamado_id}</div>
             </div>
-            <div style={S.div}/>
-            <div style={S.sec}>Dados do Chamado</div>
-            <div style={S.row}><span style={S.lbl}>ID</span><span style={S.valCyan}>{selected.chamado_id||selected.id.slice(0,8)}</span></div>
-            <div style={S.row}><span style={S.lbl}>Responsável</span><span style={S.val}>{selected.responsavel}</span></div>
-            <div style={S.row}><span style={S.lbl}>Telefone</span><span style={S.val}>{fPhone(selected.telefone)}</span></div>
-            <div style={S.row}><span style={S.lbl}>Endereço</span><span style={S.val}>{selected.endereco}</span></div>
-            <div style={S.row}><span style={S.lbl}>Cidade/Estado</span><span style={S.val}>{selected.cidade}{selected.estado?` / ${selected.estado}`:''}</span></div>
-            <div style={S.row}><span style={S.lbl}>Recebido</span><span style={S.val}>{fDate(selected.criado_em)}</span></div>
-            <div style={S.div}/>
-            <div style={S.sec}>Atualizar Status</div>
-            <select style={S.sel} value={selected.status} onChange={e=>updateStatus(selected.id,e.target.value as Status,nomeUser)}>
-              <option value="novo">Novo</option>
-              <option value="contato">Em Contato</option>
-              <option value="instalado">Instalado</option>
-              <option value="pendente">Pendente</option>
-            </select>
-            <a style={S.waFull} href={waUrl(selected.telefone,selected.responsavel,selected.empresa)} target="_blank" rel="noreferrer">{WA} Abrir WhatsApp</a>
-            <div style={S.div}/>
-            <div style={S.sec}>Adicionar Nota</div>
-            <textarea style={S.notaInp} placeholder="Digite uma anotação..." value={nota} onChange={e=>setNota(e.target.value)} rows={3}/>
-            <button style={S.notaBtn} onClick={addNota} disabled={saving}>{saving?'Salvando...':'+ Registrar Nota'}</button>
-            <div style={S.div}/>
-            <div style={S.sec}>Histórico</div>
-            <div style={S.tl}>
-              {chamados.length===0&&<span style={{fontSize:10,color:'var(--muted)',fontStyle:'italic'}}>Nenhum registro ainda.</span>}
-              {chamados.map((c,i)=>(
-                <div key={c.id} style={S.tlItem}>
-                  <div style={{...S.tlDot,background:i===0?'var(--cyan)':'var(--green)'}}/>
-                  <div style={S.tlCo}>
-                    <span style={S.tlTxt}>{c.descricao}</span>
-                    <span style={S.tlDate}>{fDate(c.criado_em)} · <span style={S.tlUser}>{c.usuario}</span></span>
+            <span style={{background:SC[selected.status],color:ST[selected.status],border:`1px solid ${ST[selected.status]}44`,borderRadius:20,fontSize:9,padding:'3px 9px',fontWeight:700,flexShrink:0}}>{SL[selected.status]}</span>
+          </div>
+
+          <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:14}}>
+            {/* Info cards */}
+            <div style={{background:'rgba(0,0,0,.3)',border:'1px solid var(--border)',borderRadius:12,padding:14,display:'flex',flexDirection:'column',gap:10}}>
+              {[
+                {l:'Responsável',v:selected.responsavel},
+                {l:'Telefone',v:fPhone(selected.telefone)},
+                {l:'CNPJ',v:selected.cnpj},
+                {l:'Endereço',v:selected.endereco},
+                {l:'Cidade/Estado',v:`${selected.cidade||''}${selected.estado?` / ${selected.estado}`:''}`},
+                {l:'Recebido em',v:fDate(selected.criado_em)},
+              ].map(r=>(
+                <div key={r.l} style={{display:'flex',flexDirection:'column',gap:2}}>
+                  <span style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em'}}>{r.l}</span>
+                  <span style={{fontSize:13,color:'var(--text)',lineHeight:1.4}}>{r.v||'-'}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* WhatsApp button */}
+            <a href={waUrl(selected.telefone,selected.responsavel,selected.empresa)} target="_blank" rel="noreferrer"
+              style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'rgba(0,255,153,.12)',border:'1px solid rgba(0,255,153,.3)',color:'var(--green)',borderRadius:12,padding:'14px',fontSize:15,fontWeight:700,textDecoration:'none'}}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.287 7.041L.785 23.216a.5.5 0 0 0 .619.619l4.175-1.502A11.948 11.948 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.82 9.82 0 0 1-5.007-1.371l-.359-.214-3.717 1.337 1.337-3.717-.214-.359A9.82 9.82 0 0 1 2.182 12C2.182 6.56 6.56 2.182 12 2.182c5.44 0 9.818 4.378 9.818 9.818 0 5.44-4.378 9.818-9.818 9.818z"/></svg>
+              Abrir WhatsApp
+            </a>
+
+            {/* Status update */}
+            <div style={{background:'rgba(0,0,0,.3)',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+              <div style={{fontSize:10,color:'var(--cyan)',fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',marginBottom:10}}>Atualizar Status</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {(['novo','contato','instalado','pendente'] as Status[]).map(s=>(
+                  <button key={s} onClick={()=>updateStatus(selected.id,s)}
+                    style={{padding:'10px 8px',borderRadius:10,fontSize:12,fontWeight:selected.status===s?700:400,cursor:'pointer',fontFamily:'inherit',transition:'.15s',border:`1px solid ${ST[s]}${selected.status===s?'':'33'}`,background:selected.status===s?SC[s]:'rgba(0,0,0,.2)',color:ST[s]}}>
+                    {SL[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Nota */}
+            <div style={{background:'rgba(0,0,0,.3)',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+              <div style={{fontSize:10,color:'var(--cyan)',fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',marginBottom:10}}>Adicionar Nota</div>
+              <textarea value={nota} onChange={e=>setNota(e.target.value)} placeholder="Digite uma anotação..." rows={3}
+                style={{width:'100%',background:'rgba(0,0,0,.4)',border:'1px solid var(--border)',color:'var(--text)',borderRadius:8,padding:'10px',fontSize:13,fontFamily:'inherit',resize:'none',outline:'none',marginBottom:8}}/>
+              <button onClick={addNota} disabled={saving}
+                style={{width:'100%',background:'rgba(0,229,255,.1)',border:'1px solid rgba(0,229,255,.25)',color:'var(--cyan)',borderRadius:8,padding:'10px',fontSize:13,fontWeight:700,cursor:saving?'not-allowed':'pointer',fontFamily:'inherit'}}>
+                {saving?'Salvando...':'+ Registrar Nota'}
+              </button>
+            </div>
+
+            {/* Timeline */}
+            <div style={{background:'rgba(0,0,0,.3)',border:'1px solid var(--border)',borderRadius:12,padding:14}}>
+              <div style={{fontSize:10,color:'var(--cyan)',fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',marginBottom:12}}>Histórico</div>
+              {chamados.length===0?(
+                <span style={{fontSize:12,color:'var(--muted)',fontStyle:'italic'}}>Nenhum registro ainda.</span>
+              ):chamados.map((c,i)=>(
+                <div key={c.id} style={{display:'flex',gap:10,marginBottom:i<chamados.length-1?12:0}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:i===0?'var(--cyan)':'var(--green)',flexShrink:0,marginTop:4}}/>
+                  <div>
+                    <div style={{fontSize:12,color:'var(--text)',lineHeight:1.4,marginBottom:2}}>{c.descricao}</div>
+                    <div style={{fontSize:10,color:'var(--muted)'}}>{fDate(c.criado_em)} · {c.usuario}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <footer style={S.foot}>
-        <span style={{fontSize:9,color:'var(--muted)',letterSpacing:'.06em',textTransform:'uppercase'}}>Desenvolvido por</span>
+      {/* FOOTER */}
+      <footer style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:'10px 16px',borderTop:'1px solid var(--border)',background:'rgba(0,0,0,.3)',position:'relative',zIndex:1,flexWrap:'wrap'}}>
+        <span style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.06em'}}>Desenvolvido por</span>
         <span style={{fontSize:10,fontWeight:700,color:'var(--cyan)'}}>OneClick Soluções</span>
         <span style={{fontSize:10,color:'var(--muted)'}}>×</span>
-        <div style={{background:'#fff',borderRadius:5,padding:'2px 8px',height:22,display:'flex',alignItems:'center'}}>
-          <Image src="/logo-stockfarma.png" alt="Stock Farma" width={56} height={16} style={{objectFit:'contain'}}/>
+        <div style={{background:'#fff',borderRadius:4,padding:'1px 7px',height:20,display:'flex',alignItems:'center'}}>
+          <Image src="/logo-stockfarma.png" alt="Stock Farma" width={52} height={14} style={{objectFit:'contain'}}/>
         </div>
-        <div style={{width:1,height:12,background:'var(--border)'}}/>
-        <span style={{fontSize:9,color:'var(--muted)',letterSpacing:'.06em',textTransform:'uppercase'}}>Pedido Eletrônico · Canal Parceiro · {new Date().getFullYear()}</span>
       </footer>
     </div>
   )

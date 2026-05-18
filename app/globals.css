@@ -1,16 +1,33 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
-  --bg0:#010712;--bg1:#06182a;--bg2:#0d2540;
-  --cyan:#00e5ff;--green:#00ff99;--yellow:#ffd34d;--red:#ff3b5f;
-  --text:#ddeeff;--muted:#5a7a9a;--border:rgba(0,229,255,.13);
-  --card:rgba(6,24,42,.85);
+  --bg0: #020d1f;
+  --bg1: #061628;
+  --bg2: #0d2540;
+  --card: rgba(8, 28, 54, 0.9);
+  --cyan: #00e5ff;
+  --green: #00ff99;
+  --yellow: #ffd34d;
+  --red: #ff3b5f;
+  --text: #e8f4ff;
+  --muted: #6a9abb;
+  --border: rgba(0, 229, 255, 0.18);
 }
-html,body { height:100%;background:linear-gradient(160deg,var(--bg0) 0%,var(--bg1) 60%,#081520 100%);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh; }
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,229,255,.2);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:rgba(0,229,255,.4)}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
-@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes spin{to{transform:rotate(360deg)}}
+
+html, body {
+  min-height: 100%;
+  background: linear-gradient(150deg, var(--bg0) 0%, var(--bg1) 50%, #071220 100%);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,229,255,.25); border-radius: 2px; }
+
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideRight { from{transform:translateX(-100%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes spin { to{transform:rotate(360deg)} }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }

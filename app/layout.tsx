@@ -6,18 +6,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#00e5ff',
+  themeColor: '#0a1929',
 }
 
 export const metadata: Metadata = {
-  title: 'CRM Pedido Eletrônico | OneClick',
+  title: 'Pedido Eletrônico | OneClick',
   description: 'Portal de Instalações — Canal Parceiro Stock Farma',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'CRM OneClick',
-  },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'PE OneClick' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
